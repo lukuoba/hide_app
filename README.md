@@ -15,6 +15,13 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo start
    ```
+   # 启动应用（选择一个平台）
+npm start          # 启动开发服务器
+
+# 或者直接选择平台
+npm run ios        # 启动 iOS 模拟器
+npm run android    # 启动 Android 模拟器
+npm run web        # 在浏览器中运行
 
 In the output, you'll find options to open the app in a
 
