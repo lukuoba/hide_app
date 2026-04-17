@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, Image, Modal, Platform, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import appSchemes from './data/app-schemes.json';
 import { useAppTheme } from './theme';
 
 export default function InternalScreen() {
@@ -9,18 +10,39 @@ export default function InternalScreen() {
   const { themeName, theme, setThemeName } = useAppTheme();
   const [showSettings, setShowSettings] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showAddNewModal, setShowAddNewModal] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const platform = Platform.OS;
+  const [appName, setAppName] = useState('');
+  const [appScheme, setAppScheme] = useState('');
+  const [androidApps, setAndroidApps] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [addedApps, setAddedApps] = useState<any[]>([]);
+  const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const styles = createStyles(theme);
 
-  const apps = [
-    { name: 'PHOTOS', icon: '📷', color: '#3B82F6' },
-    { name: 'MESSAGES', icon: '💬', color: '#10B981' },
-    { name: 'NOTES', icon: '📝', color: '#F97316' },
-    { name: 'CONTACTS', icon: '👥', color: '#8B5CF6' },
-    { name: 'BACKUP', icon: '☁️', color: '#64748B' },
-  ];
+  useEffect(() => {
+    // 存储平台信息到本地存储
+    AsyncStorage.setItem('device_platform', Platform.OS);
+    // 加载已添加的应用
+    loadAddedApps();
+  }, []);
+
+  const loadAddedApps = async () => {
+    try {
+      const storedApps = await AsyncStorage.getItem('added_apps');
+      if (storedApps) {
+        setAddedApps(JSON.parse(storedApps));
+      }
+    } catch (error) {
+      console.error('加载已添加应用失败:', error);
+    }
+  };
+
+  // 初始化时不包含默认应用数据
+  const apps: any[] = [];
 
   const handleChangePassword = () => {
     setShowPasswordModal(true);
@@ -69,6 +91,121 @@ export default function InternalScreen() {
 
   const toggleTheme = () => {
     setThemeName(themeName === 'light' ? 'dark' : 'light');
+  };
+
+  const handleAddNew = async () => {
+    if (platform === 'android') {
+      // 模拟获取安卓应用列表
+      setIsLoading(true);
+      try {
+        // 这里应该使用实际的安卓API获取应用列表
+        // 暂时模拟一些数据
+        const mockApps = [
+          { name: '微信', packageName: 'com.tencent.mm' },
+          { name: '支付宝', packageName: 'com.eg.android.AlipayGphone' },
+          { name: 'QQ', packageName: 'com.tencent.mobileqq' },
+          { name: '淘宝', packageName: 'com.taobao.taobao' },
+          { name: '抖音', packageName: 'com.ss.android.ugc.aweme' },
+        ];
+        setAndroidApps(mockApps);
+      } catch (error) {
+        console.error('获取应用列表失败:', error);
+        Alert.alert('错误', '获取应用列表失败');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    setShowAddNewModal(true);
+  };
+
+  const handleAppNameChange = async (text: string) => {
+    setAppName(text);
+    
+    // 清除之前的定时器
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    
+    // 设置新的定时器，300ms后执行匹配
+    debounceTimer.current = setTimeout(() => {
+      if (text.length > 1) {
+        try {
+          // 在 appSchemes 中查找匹配的应用
+          const matchingApp = appSchemes.apps.find(app => 
+            app.name.toLowerCase().includes(text.toLowerCase())
+          );
+          if (matchingApp) {
+            setAppScheme(matchingApp.scheme);
+          } else {
+            setAppScheme('');
+          }
+        } catch (error) {
+          console.error('匹配应用失败:', error);
+        }
+      } else {
+        setAppScheme('');
+      }
+    }, 300);
+  };
+
+  const handleAddApp = async () => {
+    if (platform === 'ios' || platform === 'web') {
+      if (!appName || !appScheme) {
+        Alert.alert('错误', '请填写应用名称和 Scheme');
+        return;
+      }
+    }
+    
+    // 验证并格式化 URL Scheme
+    let formattedScheme = appScheme.trim();
+    if (!formattedScheme.includes('://')) {
+      formattedScheme = formattedScheme + '://';
+    }
+    
+    // 创建新应用对象
+    const newApp = {
+      id: Date.now().toString(),
+      name: appName.trim(),
+      scheme: formattedScheme,
+      color: `hsl(${Math.random() * 360}, 70%, 60%)` // 随机颜色
+    };
+    
+    try {
+      // 更新添加的应用列表
+      const updatedApps = [...addedApps, newApp];
+      setAddedApps(updatedApps);
+      
+      // 存储到本地存储
+      await AsyncStorage.setItem('added_apps', JSON.stringify(updatedApps));
+      
+      Alert.alert('成功', `已添加应用: ${appName}\nScheme: ${formattedScheme}`);
+    } catch (error) {
+      console.error('存储应用失败:', error);
+      Alert.alert('错误', '添加应用失败，请重试');
+      return;
+    }
+    
+    setShowAddNewModal(false);
+    setAppName('');
+    setAppScheme('');
+    setAndroidApps([]);
+  };
+
+  const handleCancelAdd = () => {
+    setShowAddNewModal(false);
+    setAppName('');
+    setAppScheme('');
+    setAndroidApps([]);
+  };
+
+  const handleAppPress = async (scheme: string) => {
+    try {
+      // 先尝试直接打开，让 iOS 系统判断应用是否安装
+      await Linking.openURL(scheme);
+    } catch (error) {
+      console.error('打开应用失败:', error);
+      Alert.alert('错误', '无法打开应用，请确保应用已安装');
+    }
   };
 
   return (
@@ -128,16 +265,21 @@ export default function InternalScreen() {
 
           {/* App Grid */}
           <View style={styles.appGrid}>
-            {apps.map((app, index) => (
-              <TouchableOpacity key={index} style={styles.appItem}>
+            {/* Added Apps */}
+            {addedApps.map((app) => (
+              <TouchableOpacity 
+                key={app.id} 
+                style={styles.appItem}
+                onPress={() => handleAppPress(app.scheme)}
+              >
                 <View style={[styles.appIcon, { backgroundColor: app.color }]}>
-                  <Text style={styles.appIconText}>{app.icon}</Text>
+                  <Text style={styles.appIconText}>📱</Text>
                 </View>
                 <Text style={styles.appName}>{app.name}</Text>
               </TouchableOpacity>
             ))}
             {/* Add New Button */}
-            <TouchableOpacity style={styles.addButton}>
+            <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
               <View style={styles.addButtonIcon}>
                 <Text style={styles.addButtonIconText}>+</Text>
               </View>
@@ -221,6 +363,82 @@ export default function InternalScreen() {
                       onPress={handleSubmitPassword}
                     >
                       <Text style={styles.submitButtonText}>确认</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+
+        {/* Add New App Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showAddNewModal}
+          onRequestClose={handleCancelAdd}
+        >
+          <TouchableWithoutFeedback onPress={handleCancelAdd}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={[styles.modalContent, { width: '90%', maxHeight: '80%' }]}>
+                  <Text style={styles.modalTitle}>
+                    {platform === 'ios' || platform === 'web' ? '添加新应用' : '选择应用'}
+                  </Text>
+                  
+                  {platform === 'ios' || platform === 'web' ? (
+                    <View>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="应用名称"
+                        placeholderTextColor={theme.secondaryText}
+                        value={appName}
+                        onChangeText={handleAppNameChange}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="App URL Scheme"
+                        placeholderTextColor={theme.secondaryText}
+                        value={appScheme}
+                        onChangeText={setAppScheme}
+                      />
+                    </View>
+                  ) : (
+                    <ScrollView style={styles.appList}>
+                      {isLoading ? (
+                        <Text style={styles.loadingText}>加载中...</Text>
+                      ) : androidApps.length > 0 ? (
+                        androidApps.map((app, index) => (
+                          <TouchableOpacity 
+                            key={index} 
+                            style={styles.androidAppItem}
+                            onPress={() => {
+                              setAppName(app.name);
+                              setAppScheme(`${app.packageName}://`);
+                            }}
+                          >
+                            <Text style={styles.androidAppName}>{app.name}</Text>
+                            <Text style={styles.androidAppPackage}>{app.packageName}</Text>
+                          </TouchableOpacity>
+                        ))
+                      ) : (
+                        <Text style={styles.noAppsText}>未找到应用</Text>
+                      )}
+                    </ScrollView>
+                  )}
+                  
+                  <View style={styles.modalButtons}>
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.cancelButton]}
+                      onPress={handleCancelAdd}
+                    >
+                      <Text style={styles.cancelButtonText}>取消</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.modalButton, styles.submitButton]}
+                      onPress={handleAddApp}
+                    >
+                      <Text style={styles.submitButtonText}>添加</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -571,5 +789,37 @@ const createStyles = (theme: any) =>
       color: theme.accentText,
       fontSize: 16,
       fontWeight: '600',
+    },
+    appList: {
+      maxHeight: 300,
+      marginBottom: 16,
+    },
+    androidAppItem: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
+    },
+    androidAppName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    androidAppPackage: {
+      fontSize: 12,
+      color: theme.secondaryText,
+    },
+    loadingText: {
+      textAlign: 'center',
+      padding: 20,
+      color: theme.secondaryText,
+    },
+    noAppsText: {
+      textAlign: 'center',
+      padding: 20,
+      color: theme.secondaryText,
     },
   });
