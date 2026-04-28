@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ExpoAndroidAppList } from 'expo-android-app-list';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import BottomTabBar from './components/BottomTabBar';
 import appSchemes from './data/app-schemes.json';
 import { useAppTheme } from './theme';
-
 export default function InternalScreen() {
   const router = useRouter();
   const { themeName, theme, setThemeName } = useAppTheme();
@@ -103,9 +103,9 @@ export default function InternalScreen() {
         const apps = await ExpoAndroidAppList.getAll();
         // 过滤出有名称和包名的应用
         const filteredApps = apps
-          .filter(app => app.name && app.packageName)
+          .filter(app => app.appName && app.packageName)
           .map(app => ({
-            name: app.name,
+            name: app.appName,
             packageName: app.packageName
           }));
         setAndroidApps(filteredApps);
@@ -263,12 +263,6 @@ export default function InternalScreen() {
           {showSettings && (
             <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
               <View style={styles.settingsDropdown}>
-                <TouchableOpacity 
-                  style={styles.dropdownItem}
-                  onPress={handleChangePassword}
-                >
-                  <Text style={styles.dropdownItemText}>修改密码</Text>
-                </TouchableOpacity>
                 <View style={styles.dropdownItem}>
                   <Text style={styles.dropdownItemText}>主题风格</Text>
                   <TouchableOpacity 
@@ -280,6 +274,13 @@ export default function InternalScreen() {
                     </View>
                   </TouchableOpacity>
                 </View>
+                <TouchableOpacity 
+                  style={styles.dropdownItem}
+                  onPress={handleChangePassword}
+                >
+                  <Text style={styles.dropdownItemText}>修改密码</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity 
                   style={styles.dropdownItem}
                   onPress={() => {
@@ -298,8 +299,7 @@ export default function InternalScreen() {
         <View style={styles.content}>
           {/* Header Section */}
           <View style={styles.headerSection}>
-            <Text style={styles.title}>Secure Content</Text>
-            <Text style={styles.description}>Encrypted storage for your private applications and media.</Text>
+            <Text style={styles.title}>已添加应用</Text>
           </View>
 
           {/* App Grid */}
@@ -330,15 +330,15 @@ export default function InternalScreen() {
               <View style={styles.addButtonIcon}>
                 <Text style={styles.addButtonIconText}>+</Text>
               </View>
-              <Text style={styles.addButtonText}>ADD NEW</Text>
+              <Text style={styles.addButtonText}>添加APP</Text>
             </TouchableOpacity>
           </View>
 
           {/* Security Tip Card */}
-          <View style={styles.securityCard}>
+          {/* <View style={styles.securityCard}>
             <View style={styles.securityCardContent}>
-              <Text style={styles.securityTipLabel}>SECURITY TIP</Text>
-              <Text style={styles.securityTipTitle}>Keep your vault clean</Text>
+              <Text style={styles.securityTipLabel}>联系客服</Text>
+              <Text style={styles.securityTipTitle}>右侧学习视频</Text>
               <Text style={styles.securityTipDescription}>
                 Regularly review your hidden applications to ensure maximum privacy and free up encrypted storage space.
               </Text>
@@ -349,7 +349,7 @@ export default function InternalScreen() {
                 style={styles.securityImage}
               />
             </View>
-          </View>
+          </View> */}
         </View>
 
         {/* Password Change Modal */}
@@ -497,6 +497,7 @@ export default function InternalScreen() {
             </View>
           </TouchableWithoutFeedback>
         </Modal>
+         <BottomTabBar />
       </View>
     </TouchableWithoutFeedback>
   );
@@ -516,6 +517,7 @@ const createStyles = (theme: any) =>
       paddingTop: 50,
       paddingBottom: 15,
       position: 'relative',
+      zIndex: 100,
     },
     backButton: {
       flexDirection: 'row',
@@ -602,6 +604,7 @@ const createStyles = (theme: any) =>
       flex: 1,
       paddingHorizontal: 20,
       paddingTop: 20,
+      zIndex: 1,
     },
     headerSection: {
       marginBottom: 30,
@@ -668,7 +671,8 @@ const createStyles = (theme: any) =>
       lineHeight: 16,
     },
     appName: {
-      fontSize: 12,
+      fontSize: 14,
+      fontWeight: '600',
       color: theme.text,
       textAlign: 'center',
       numberOfLines: 1,
@@ -691,7 +695,7 @@ const createStyles = (theme: any) =>
       color: theme.secondaryText,
     },
     addButtonText: {
-      fontSize: 12,
+      fontSize: 14,
       color: theme.secondaryText,
       textAlign: 'center',
     },
