@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { ExpoAndroidAppList } from 'expo-android-app-list';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import { Alert, Image, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
@@ -20,6 +21,7 @@ export default function InternalScreen() {
   const [androidApps, setAndroidApps] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [addedApps, setAddedApps] = useState<any[]>([]);
+  const [showRemoveMode, setShowRemoveMode] = useState(false);
   const debounceTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const styles = createStyles(theme);
 
@@ -95,19 +97,18 @@ export default function InternalScreen() {
 
   const handleAddNew = async () => {
     if (platform === 'android') {
-      // 模拟获取安卓应用列表
+      // 获取真实的安卓应用列表
       setIsLoading(true);
       try {
-        // 这里应该使用实际的安卓API获取应用列表
-        // 暂时模拟一些数据
-        const mockApps = [
-          { name: '微信', packageName: 'com.tencent.mm' },
-          { name: '支付宝', packageName: 'com.eg.android.AlipayGphone' },
-          { name: 'QQ', packageName: 'com.tencent.mobileqq' },
-          { name: '淘宝', packageName: 'com.taobao.taobao' },
-          { name: '抖音', packageName: 'com.ss.android.ugc.aweme' },
-        ];
-        setAndroidApps(mockApps);
+        const apps = await ExpoAndroidAppList.getAll();
+        // 过滤出有名称和包名的应用
+        const filteredApps = apps
+          .filter(app => app.name && app.packageName)
+          .map(app => ({
+            name: app.name,
+            packageName: app.packageName
+          }));
+        setAndroidApps(filteredApps);
       } catch (error) {
         console.error('获取应用列表失败:', error);
         Alert.alert('错误', '获取应用列表失败');
@@ -178,7 +179,14 @@ export default function InternalScreen() {
       // 存储到本地存储
       await AsyncStorage.setItem('added_apps', JSON.stringify(updatedApps));
       
-      Alert.alert('成功', `已添加应用: ${appName}\nScheme: ${formattedScheme}`);
+      // iOS平台提示手动隐藏应用
+      if (platform === 'ios') {
+        Alert.alert('成功', `已添加应用: ${appName}\nScheme: ${formattedScheme}\n\niOS平台需要手动隐藏应用:\n1. 进入设置 -> 屏幕使用时间\n2. 点击内容和隐私访问限制\n3. 点击允许的应用\n4. 关闭要隐藏的应用\n\n注意：隐藏后应用不会在主屏幕显示，只能通过本应用打开`);
+      } else if (platform === 'android') {
+        Alert.alert('成功', `已添加应用: ${appName}\nScheme: ${formattedScheme}\n\n安卓平台需要手动隐藏应用:\n1. 进入设置 -> 应用\n2. 找到并点击该应用\n3. 点击"禁用"或"隐藏"选项\n\n注意：不同安卓版本操作可能有所不同`);
+      } else {
+        Alert.alert('成功', `已添加应用: ${appName}\nScheme: ${formattedScheme}`);
+      }
     } catch (error) {
       console.error('存储应用失败:', error);
       Alert.alert('错误', '添加应用失败，请重试');
@@ -208,8 +216,30 @@ export default function InternalScreen() {
     }
   };
 
+  const handleRemoveApp = async (appId: string) => {
+    try {
+      // 从添加的应用列表中移除
+      const updatedApps = addedApps.filter(app => app.id !== appId);
+      setAddedApps(updatedApps);
+      
+      // 更新本地存储
+      await AsyncStorage.setItem('added_apps', JSON.stringify(updatedApps));
+      
+      // 如果没有应用了，退出移除模式
+      if (updatedApps.length === 0) {
+        setShowRemoveMode(false);
+      }
+    } catch (error) {
+      console.error('移除应用失败:', error);
+      Alert.alert('错误', '移除应用失败，请重试');
+    }
+  };
+
   return (
-    <TouchableWithoutFeedback onPress={() => setShowSettings(false)}>
+    <TouchableWithoutFeedback onPress={() => {
+      setShowSettings(false);
+      setShowRemoveMode(false);
+    }}>
       <View style={styles.container}>
         {/* Top Navigation */}
         <View style={styles.header}>
@@ -250,6 +280,15 @@ export default function InternalScreen() {
                     </View>
                   </TouchableOpacity>
                 </View>
+                <TouchableOpacity 
+                  style={styles.dropdownItem}
+                  onPress={() => {
+                    setShowRemoveMode(true);
+                    setShowSettings(false);
+                  }}
+                >
+                  <Text style={styles.dropdownItemText}>移除隐藏app</Text>
+                </TouchableOpacity>
               </View>
             </TouchableWithoutFeedback>
           )}
@@ -270,10 +309,18 @@ export default function InternalScreen() {
               <TouchableOpacity 
                 key={app.id} 
                 style={styles.appItem}
-                onPress={() => handleAppPress(app.scheme)}
+                onPress={() => !showRemoveMode && handleAppPress(app.scheme)}
               >
                 <View style={[styles.appIcon, { backgroundColor: app.color }]}>
                   <Text style={styles.appIconText}>📱</Text>
+                  {showRemoveMode && (
+                    <TouchableOpacity 
+                      style={styles.removeButton}
+                      onPress={() => handleRemoveApp(app.id)}
+                    >
+                      <Text style={styles.removeButtonText}>-</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
                 <Text style={styles.appName}>{app.name}</Text>
               </TouchableOpacity>
@@ -380,69 +427,73 @@ export default function InternalScreen() {
         >
           <TouchableWithoutFeedback onPress={handleCancelAdd}>
             <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
-                <View style={[styles.modalContent, { width: '90%', maxHeight: '80%' }]}>
-                  <Text style={styles.modalTitle}>
-                    {platform === 'ios' || platform === 'web' ? '添加新应用' : '选择应用'}
-                  </Text>
-                  
-                  {platform === 'ios' || platform === 'web' ? (
-                    <View>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="应用名称"
-                        placeholderTextColor={theme.secondaryText}
-                        value={appName}
-                        onChangeText={handleAppNameChange}
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="App URL Scheme"
-                        placeholderTextColor={theme.secondaryText}
-                        value={appScheme}
-                        onChangeText={setAppScheme}
-                      />
+                <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                  <ScrollView 
+                    style={[styles.modalContent, { width: '90%', maxHeight: '50%' }]}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingBottom: 20, flexGrow: 1 }}
+                  >
+                    <Text style={styles.modalTitle}>
+                      {platform === 'ios' || platform === 'web' ? '添加新应用' : '选择应用'}
+                    </Text>
+                    
+                    {platform === 'ios' || platform === 'web' ? (
+                      <View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="应用名称"
+                          placeholderTextColor={theme.secondaryText}
+                          value={appName}
+                          onChangeText={handleAppNameChange}
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="App URL Scheme"
+                          placeholderTextColor={theme.secondaryText}
+                          value={appScheme}
+                          onChangeText={setAppScheme}
+                        />
+                      </View>
+                    ) : (
+                      <ScrollView style={styles.appList} showsVerticalScrollIndicator={false}>
+                        {isLoading ? (
+                          <Text style={styles.loadingText}>加载中...</Text>
+                        ) : androidApps.length > 0 ? (
+                          androidApps.map((app, index) => (
+                            <TouchableOpacity 
+                              key={index} 
+                              style={styles.androidAppItem}
+                              onPress={() => {
+                                setAppName(app.name);
+                                setAppScheme(`${app.packageName}://`);
+                              }}
+                            >
+                              <Text style={styles.androidAppName}>{app.name}</Text>
+                              <Text style={styles.androidAppPackage}>{app.packageName}</Text>
+                            </TouchableOpacity>
+                          ))
+                        ) : (
+                          <Text style={styles.noAppsText}>未找到应用</Text>
+                        )}
+                      </ScrollView>
+                    )}
+                    
+                    <View style={styles.modalButtons}>
+                      <TouchableOpacity 
+                        style={[styles.modalButton, styles.cancelButton]}
+                        onPress={handleCancelAdd}
+                      >
+                        <Text style={styles.cancelButtonText}>取消</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.modalButton, styles.submitButton]}
+                        onPress={handleAddApp}
+                      >
+                        <Text style={styles.submitButtonText}>添加</Text>
+                      </TouchableOpacity>
                     </View>
-                  ) : (
-                    <ScrollView style={styles.appList}>
-                      {isLoading ? (
-                        <Text style={styles.loadingText}>加载中...</Text>
-                      ) : androidApps.length > 0 ? (
-                        androidApps.map((app, index) => (
-                          <TouchableOpacity 
-                            key={index} 
-                            style={styles.androidAppItem}
-                            onPress={() => {
-                              setAppName(app.name);
-                              setAppScheme(`${app.packageName}://`);
-                            }}
-                          >
-                            <Text style={styles.androidAppName}>{app.name}</Text>
-                            <Text style={styles.androidAppPackage}>{app.packageName}</Text>
-                          </TouchableOpacity>
-                        ))
-                      ) : (
-                        <Text style={styles.noAppsText}>未找到应用</Text>
-                      )}
-                    </ScrollView>
-                  )}
-                  
-                  <View style={styles.modalButtons}>
-                    <TouchableOpacity 
-                      style={[styles.modalButton, styles.cancelButton]}
-                      onPress={handleCancelAdd}
-                    >
-                      <Text style={styles.cancelButtonText}>取消</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={[styles.modalButton, styles.submitButton]}
-                      onPress={handleAddApp}
-                    >
-                      <Text style={styles.submitButtonText}>添加</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </TouchableWithoutFeedback>
+                  </ScrollView>
+                </TouchableWithoutFeedback>
             </View>
           </TouchableWithoutFeedback>
         </Modal>
@@ -461,263 +512,223 @@ const createStyles = (theme: any) =>
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 24,
-      paddingTop: Platform.OS === 'ios' ? 50 : 30,
-      paddingBottom: 20,
-      backgroundColor: theme.background,
-      zIndex: 1001,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 4,
-        },
-        android: {
-          elevation: 10,
-        },
-      }),
+      paddingHorizontal: 20,
+      paddingTop: 50,
+      paddingBottom: 15,
+      position: 'relative',
     },
     backButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 8,
-      borderRadius: 8,
     },
     backButtonIcon: {
-      fontSize: 18,
-      marginRight: 4,
-      color: theme.secondaryText,
+      fontSize: 24,
+      color: theme.text,
+      marginRight: 5,
     },
     backButtonText: {
-      fontSize: 14,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      color: theme.secondaryText,
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
     },
     settingsButton: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
+      padding: 8,
     },
     settingsIcon: {
-      fontSize: 20,
-      color: theme.secondaryText,
-    },
-    content: {
-      flex: 1,
-      paddingHorizontal: 24,
-      paddingBottom: 40,
-    },
-    headerSection: {
-      marginBottom: 48,
-    },
-    title: {
-      fontSize: 36,
-      fontWeight: '800',
-      color: theme.text,
-      marginBottom: 8,
-      fontFamily: Platform.OS === 'ios' ? 'Manrope' : 'sans-serif',
-    },
-    description: {
-      fontSize: 16,
-      color: theme.secondaryText,
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
-    },
-    appGrid: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'space-between',
-      marginBottom: 64,
-    },
-    appItem: {
-      width: '30%',
-      alignItems: 'center',
-      marginBottom: 24,
-    },
-    appIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 4,
-        },
-      }),
-    },
-    appIconText: {
       fontSize: 24,
-    },
-    appName: {
-      fontSize: 12,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      color: theme.secondaryText,
-      textAlign: 'center',
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
-    },
-    addButton: {
-      width: '30%',
-      alignItems: 'center',
-      marginBottom: 24,
-      padding: 16,
-      borderRadius: 16,
-      borderWidth: 2,
-      borderStyle: 'dashed',
-      borderColor: theme.border,
-    },
-    addButtonIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginBottom: 12,
-    },
-    addButtonIconText: {
-      fontSize: 24,
-      color: theme.secondaryText,
-    },
-    addButtonText: {
-      fontSize: 12,
-      fontWeight: '700',
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      color: theme.secondaryText,
-      textAlign: 'center',
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
-    },
-    securityCard: {
-      flexDirection: 'row',
-      backgroundColor: theme.card,
-      borderRadius: 16,
-      padding: 32,
-      borderLeftWidth: 6,
-      borderLeftColor: theme.accent,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.1,
-          shadowRadius: 12,
-        },
-        android: {
-          elevation: 4,
-        },
-      }),
-    },
-    securityCardContent: {
-      flex: 1,
-      marginRight: 24,
-    },
-    securityTipLabel: {
-      fontSize: 10,
-      fontWeight: '900',
-      textTransform: 'uppercase',
-      letterSpacing: 2,
-      color: theme.accent,
-      backgroundColor: `${theme.accent}20`,
-      paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: 12,
-      alignSelf: 'flex-start',
-      marginBottom: 12,
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
-    },
-    securityTipTitle: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: theme.text,
-      marginBottom: 8,
-      fontFamily: Platform.OS === 'ios' ? 'Manrope' : 'sans-serif',
-    },
-    securityTipDescription: {
-      fontSize: 14,
-      color: theme.secondaryText,
-      lineHeight: 20,
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
-    },
-    securityCardImage: {
-      width: 120,
-      height: 80,
-      borderRadius: 8,
-      overflow: 'hidden',
-      backgroundColor: theme.card,
-    },
-    securityImage: {
-      width: '100%',
-      height: '100%',
-      resizeMode: 'cover',
     },
     settingsDropdown: {
       position: 'absolute',
-      top: 80,
-      right: 24,
-      backgroundColor: 'transparent',
+      top: 70,
+      right: 20,
+      backgroundColor: theme.card,
       borderRadius: 12,
-      padding: 8,
-      minWidth: 160,
-      zIndex: 1002,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.2,
-          shadowRadius: 8,
-        },
-        android: {
-          elevation: 12,
-        },
-      }),
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 8,
+      elevation: 4,
+      zIndex: 1000,
+      minWidth: 200,
     },
     dropdownItem: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingVertical: 12,
       paddingHorizontal: 16,
-      borderRadius: 8,
-      backgroundColor: theme.card,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border,
     },
     dropdownItemText: {
       fontSize: 14,
       color: theme.text,
-      fontFamily: Platform.OS === 'ios' ? 'Inter' : 'sans-serif',
     },
     themeToggle: {
-      padding: 4,
-    },
-    toggleTrack: {
-      width: 48,
+      width: 44,
       height: 24,
       borderRadius: 12,
       backgroundColor: theme.border,
-      padding: 2,
+      position: 'relative',
+    },
+    toggleTrack: {
+      width: 44,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: theme.border,
+      position: 'relative',
     },
     toggleTrackActive: {
-      backgroundColor: theme.accent,
+      backgroundColor: '#007AFF',
     },
     toggleThumb: {
       width: 20,
       height: 20,
       borderRadius: 10,
-      backgroundColor: theme.text,
+      backgroundColor: '#fff',
+      position: 'absolute',
+      top: 2,
+      left: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+      elevation: 2,
     },
     toggleThumbActive: {
-      backgroundColor: theme.accentText,
+      left: 22,
+    },
+    content: {
+      flex: 1,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+    },
+    headerSection: {
+      marginBottom: 30,
+    },
+    title: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 8,
+    },
+    description: {
+      fontSize: 16,
+      color: theme.secondaryText,
+      lineHeight: 24,
+    },
+    appGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 16,
+      marginBottom: 30,
+    },
+    appItem: {
+      width: 80,
+      alignItems: 'center',
+    },
+    appIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 16,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 8,
+      position: 'relative',
+    },
+    appIconText: {
+      fontSize: 28,
+    },
+    removeButton: {
+      position: 'absolute',
+      top: -8,
+      right: -8,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255, 0, 0, 0.8)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Platform.select({
+        ios: {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 2 },
+          shadowOpacity: 0.2,
+          shadowRadius: 4,
+        },
+        android: {
+          elevation: 4,
+        },
+      }),
+    },
+    removeButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: 'bold',
+      lineHeight: 16,
+    },
+    appName: {
+      fontSize: 12,
+      color: theme.text,
+      textAlign: 'center',
+      numberOfLines: 1,
+    },
+    addButton: {
+      width: 80,
+      alignItems: 'center',
+    },
+    addButtonIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: 16,
+      backgroundColor: theme.border,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    addButtonIconText: {
+      fontSize: 32,
+      color: theme.secondaryText,
+    },
+    addButtonText: {
+      fontSize: 12,
+      color: theme.secondaryText,
+      textAlign: 'center',
+    },
+    securityCard: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      padding: 20,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    securityCardContent: {
+      flex: 1,
+    },
+    securityTipLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#007AFF',
+      marginBottom: 4,
+    },
+    securityTipTitle: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    securityTipDescription: {
+      fontSize: 14,
+      color: theme.secondaryText,
+      lineHeight: 20,
+    },
+    securityCardImage: {
+      marginLeft: 16,
+    },
+    securityImage: {
+      width: 80,
+      height: 80,
+      borderRadius: 12,
     },
     modalOverlay: {
       flex: 1,
@@ -730,49 +741,38 @@ const createStyles = (theme: any) =>
       borderRadius: 16,
       padding: 24,
       width: '80%',
-      maxWidth: 320,
-      ...Platform.select({
-        ios: {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.25,
-          shadowRadius: 16,
-        },
-        android: {
-          elevation: 8,
-        },
-      }),
+      maxWidth: 400,
     },
     modalTitle: {
       fontSize: 20,
-      fontWeight: '700',
+      fontWeight: '600',
       color: theme.text,
       marginBottom: 20,
-      textAlign: 'center',
-      fontFamily: Platform.OS === 'ios' ? 'Manrope' : 'sans-serif',
     },
     input: {
       backgroundColor: theme.background,
       borderRadius: 8,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      marginBottom: 12,
+      padding: 12,
       fontSize: 16,
       color: theme.text,
+      marginBottom: 12,
       borderWidth: 1,
       borderColor: theme.border,
     },
     modalButtons: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginTop: 8,
+      marginTop: 20,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
     },
     modalButton: {
       flex: 1,
-      paddingVertical: 12,
+      padding: 12,
       borderRadius: 8,
       alignItems: 'center',
-      marginHorizontal: 6,
+      marginHorizontal: 4,
     },
     cancelButton: {
       backgroundColor: theme.border,
@@ -783,43 +783,41 @@ const createStyles = (theme: any) =>
       fontWeight: '600',
     },
     submitButton: {
-      backgroundColor: theme.accent,
+      backgroundColor: '#007AFF',
     },
     submitButtonText: {
-      color: theme.accentText,
+      color: '#fff',
       fontSize: 16,
       fontWeight: '600',
     },
     appList: {
       maxHeight: 300,
-      marginBottom: 16,
+      marginBottom: 12,
     },
     androidAppItem: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      paddingVertical: 12,
-      paddingHorizontal: 16,
+      padding: 12,
       borderBottomWidth: 1,
       borderBottomColor: theme.border,
     },
     androidAppName: {
-      fontSize: 14,
-      fontWeight: '600',
+      fontSize: 16,
       color: theme.text,
+      marginBottom: 4,
     },
     androidAppPackage: {
       fontSize: 12,
       color: theme.secondaryText,
     },
     loadingText: {
+      fontSize: 16,
+      color: theme.secondaryText,
       textAlign: 'center',
       padding: 20,
-      color: theme.secondaryText,
     },
     noAppsText: {
+      fontSize: 16,
+      color: theme.secondaryText,
       textAlign: 'center',
       padding: 20,
-      color: theme.secondaryText,
     },
   });
