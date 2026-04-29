@@ -15,8 +15,25 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```bash
    npx expo start
    ```
-   # 启动应用（选择一个平台）
+# 启动应用（选择一个平台）
 npm start          # 启动开发服务器
+
+# 项目结构
+calculator-app/
+├── app/
+│   ├── components/
+│   │   └── BottomTabBar.tsx    # 底部导航栏组件
+│   ├── data/
+│   │   └── app-schemes.json    # 应用scheme数据
+│   ├── index.tsx               # 登录页面（计算器）
+│   ├── internal.tsx            # 应用锁页面
+│   ├── gallery.tsx             # 私密相册页面
+│   ├── profile.tsx             # 我的页面
+│   ├── theme.tsx               # 主题配置
+│   └── _layout.tsx             # 路由配置
+├── assets/
+│   └── images/                 # 应用图标和启动图
+└── 配置文件...
 
 # 或者直接选择平台
 npm run ios        # 启动 iOS 模拟器

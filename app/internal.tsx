@@ -675,7 +675,7 @@ const createStyles = (theme: any) =>
       fontWeight: '600',
       color: theme.text,
       textAlign: 'center',
-      numberOfLines: 1,
+      // numberOfLines: 1,
     },
     addButton: {
       width: 80,

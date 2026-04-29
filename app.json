@@ -11,7 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
-        "NSFamilyControlsUsageDescription": "We need access to screen time data to help you hide apps from home screen"
+        "NSFamilyControlsUsageDescription": "我们需要访问屏幕使用时间数据来帮助您隐藏主屏幕上的应用",
+        "NSPhotoLibraryUsageDescription": "我们需要访问您的相册来选择照片导入私密相册",
+        "NSPhotoLibraryAddUsageDescription": "我们需要保存照片到您的相册"
       },
       "entitlements": {
         "com.apple.developer.family-controls": true
@@ -27,7 +29,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.lukuba.calculatorapp"
+      "package": "com.lukuba.calculatorapp",
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "output": "static",
